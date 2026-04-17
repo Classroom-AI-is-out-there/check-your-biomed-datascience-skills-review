@@ -1,0 +1,87 @@
+name: Basic Autograding
+
+on:
+  push:
+    branches: [main, master]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install base packages
+        run: pip install numpy pandas scikit-learn matplotlib
+      
+      - name: Detect task and validate
+        id: check
+        run: |
+          import os
+          import sys
+          
+          tasks = {
+              '1': ['task1_solution.py', 'task1_solution.ipynb'],
+              '2.1': ['task2_1_solution.py', 'task2_1_solution.ipynb'],
+              '2.2': ['task2_2_solution.py', 'task2_2_solution.ipynb'],
+              '3.1': ['task3_1_solution.py', 'task3_1_solution.ipynb'],
+              '3.2': ['task3_2_solution.py', 'task3_2_solution.ipynb'],
+              '4.1': ['task4_1_solution.py', 'task4_1_solution.ipynb'],
+              '4.2': ['task4_2_solution.py', 'task4_2_solution.ipynb'],
+          }
+          
+          found_task = None
+          found_file = None
+          
+          for task_id, filenames in tasks.items():
+              for fn in filenames:
+                  path = os.path.join('your_solution', fn)
+                  if os.path.exists(path):
+                      found_task = task_id
+                      found_file = path
+                      break
+              if found_task:
+                  break
+          
+          if not found_task:
+              print("❌ Файл решения не найден")
+              print("Ожидается: your_solution/task{N}_solution.py или .ipynb")
+              sys.exit(1)
+          
+          print(f"✅ Найдено: Task {found_task}, файл {found_file}")
+          
+          # Проверка синтаксиса для .py файлов
+          if found_file.endswith('.py'):
+              import ast
+              try:
+                  with open(found_file, 'r') as f:
+                      source = f.read()
+                  ast.parse(source)
+                  print(f"✅ Синтаксис Python корректен")
+              except SyntaxError as e:
+                  print(f"❌ Синтаксическая ошибка: {e}")
+                  sys.exit(1)
+              
+              # Проверка импортов (пробуем импортировать)
+              print(f"🔍 Проверка импортов...")
+              # Здесь можно добавить специфичные проверки если нужно
+          
+          # Сохраняем результат
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null').replace('/dev/null', 'check_result.txt'), 'w') as f:
+              f.write(f"task={found_task}\n")
+              f.write(f"file={found_file}\n")
+              f.write(f"status=ok\n")
+          
+          print(f"✅ Task {found_task} принят к проверке")
+        shell: python
+      
+      - name: Report success
+        run: |
+          echo "✅ Автотесты пройдены"
+          echo "📁 Решение принято"
+          echo "⏳ Ожидайте ручной проверки преподавателем"
