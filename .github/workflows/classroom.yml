@@ -16,66 +16,92 @@ jobs:
         with:
           python-version: '3.10'
       
-      - name: Install base packages
-        run: pip install numpy pandas scikit-learn matplotlib
+      - name: Install dependencies
+        run: |
+          pip install numpy pandas scikit-learn matplotlib
+          pip install nbformat nbconvert
       
-      - name: Detect task and validate
+      - name: Detect and validate notebook
         id: check
         run: |
           import os
           import sys
+          import json
           
           tasks = {
-              '1': ['task1_solution.py', 'task1_solution.ipynb'],
-              '2.1': ['task2_1_solution.py', 'task2_1_solution.ipynb'],
-              '2.2': ['task2_2_solution.py', 'task2_2_solution.ipynb'],
-              '3.1': ['task3_1_solution.py', 'task3_1_solution.ipynb'],
-              '3.2': ['task3_2_solution.py', 'task3_2_solution.ipynb'],
-              '4.1': ['task4_1_solution.py', 'task4_1_solution.ipynb'],
-              '4.2': ['task4_2_solution.py', 'task4_2_solution.ipynb'],
+              '1': 'task1_solution.ipynb',
+              '2.1': 'task2_1_solution.ipynb',
+              '2.2': 'task2_2_solution.ipynb',
+              '3.1': 'task3_1_solution.ipynb',
+              '3.2': 'task3_2_solution.ipynb',
+              '4.1': 'task4_1_solution.ipynb',
+              '4.2': 'task4_2_solution.ipynb',
           }
           
           found_task = None
           found_file = None
           
-          for task_id, filenames in tasks.items():
-              for fn in filenames:
-                  path = os.path.join('your_sollution', fn)
-                  if os.path.exists(path):
-                      found_task = task_id
-                      found_file = path
-                      break
-              if found_task:
+          for task_id, filename in tasks.items():
+              path = os.path.join('your-sollution', filename)
+              if os.path.exists(path):
+                  found_task = task_id
+                  found_file = path
                   break
           
           if not found_task:
               print("❌ Файл решения не найден")
-              print("Ожидается: your_sollution/task{N}_solution.py или .ipynb")
+              print("Ожидается: your-sollution/task{N}_solution.ipynb")
               sys.exit(1)
           
           print(f"✅ Найдено: Task {found_task}, файл {found_file}")
           
-          # Проверка синтаксиса для .py файлов
-          if found_file.endswith('.py'):
-              import ast
-              try:
-                  with open(found_file, 'r') as f:
-                      source = f.read()
-                  ast.parse(source)
-                  print(f"✅ Синтаксис Python корректен")
-              except SyntaxError as e:
-                  print(f"❌ Синтаксическая ошибка: {e}")
+          # Проверка структуры .ipynb
+          try:
+              with open(found_file, 'r', encoding='utf-8') as f:
+                  notebook = json.load(f)
+              
+              # Проверка основных полей
+              if 'cells' not in notebook:
+                  print("❌ Неверная структура: отсутствует 'cells'")
                   sys.exit(1)
               
-              # Проверка импортов (пробуем импортировать)
-              print(f"🔍 Проверка импортов...")
-              # Здесь можно добавить специфичные проверки если нужно
+              if 'metadata' not in notebook:
+                  print("❌ Неверная структура: отсутствует 'metadata'")
+                  sys.exit(1)
+              
+              cell_count = len(notebook['cells'])
+              print(f"✅ Найдено ячеек: {cell_count}")
+              
+              # Проверка кода в ячейках (синтаксис)
+              import ast
+              code_cells = 0
+              for i, cell in enumerate(notebook['cells']):
+                  if cell.get('cell_type') == 'code':
+                      code_cells += 1
+                      source = ''.join(cell.get('source', []))
+                      if source.strip():  # Не пустая ячейка
+                          try:
+                              ast.parse(source)
+                          except SyntaxError as e:
+                              print(f"❌ Синтаксическая ошибка в ячейке {i+1}: {e}")
+                              sys.exit(1)
+              
+              print(f"✅ Проверено ячеек с кодом: {code_cells}")
+              print(f"✅ Синтаксис Python корректен")
+              
+          except json.JSONDecodeError as e:
+              print(f"❌ Ошибка чтения JSON: {e}")
+              sys.exit(1)
+          except Exception as e:
+              print(f"❌ Ошибка проверки: {e}")
+              sys.exit(1)
           
-          # Сохраняем результат
-          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null').replace('/dev/null', 'check_result.txt'), 'w') as f:
-              f.write(f"task={found_task}\n")
-              f.write(f"file={found_file}\n")
-              f.write(f"status=ok\n")
+          # Сохраняем результат для GitHub Actions
+          output_file = os.environ.get('GITHUB_OUTPUT')
+          if output_file:
+              with open(output_file, 'a') as f:
+                  f.write(f"task={found_task}\n")
+                  f.write(f"file={found_file}\n")
           
           print(f"✅ Task {found_task} принят к проверке")
         shell: python
@@ -83,5 +109,5 @@ jobs:
       - name: Report success
         run: |
           echo "✅ Автотесты пройдены"
-          echo "📁 Решение принято"
+          echo "📁 Решение принято: ${{ steps.check.outputs.file }}"
           echo "⏳ Ожидайте ручной проверки преподавателем"
