@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Execute and grade a task solution from the repository root."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+import pandas as pd
+import yaml
+from sklearn.metrics import f1_score
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def fail(message: str, exit_code: int = 1) -> None:
+    print(message, file=sys.stderr)
+    raise SystemExit(exit_code)
+
+
+def load_config(task_id: str) -> dict:
+    config_path = REPO_ROOT / "task" / task_id / "config.yaml"
+    if not config_path.is_file():
+        fail(f"CONFIG_ERROR: missing configuration: {config_path}")
+    with config_path.open(encoding="utf-8") as stream:
+        config = yaml.safe_load(stream)
+    if not isinstance(config, dict) or config.get("task_id") != task_id:
+        fail(f"CONFIG_ERROR: invalid configuration for {task_id}")
+    return config
+
+
+def find_solution(task_id: str) -> Path:
+    base = REPO_ROOT / "your-sollution" / f"{task_id}_solution"
+    candidates = [base.with_suffix(".py"), base.with_suffix(".ipynb")]
+    found = [path for path in candidates if path.is_file()]
+    if not found:
+        fail(
+            "EXECUTION_ERROR: solution file not found; expected "
+            f"{candidates[0].relative_to(REPO_ROOT)} or "
+            f"{candidates[1].relative_to(REPO_ROOT)}",
+            2,
+        )
+    if len(found) > 1:
+        fail("EXECUTION_ERROR: submit only one Task solution (.py or .ipynb)", 2)
+    return found[0]
+
+
+def execute_solution(solution: Path, timeout: int) -> None:
+    environment = os.environ.copy()
+    environment["MPLBACKEND"] = "Agg"
+    if solution.suffix == ".py":
+        command = [sys.executable, str(solution)]
+        temporary_directory = None
+    else:
+        temporary_directory = tempfile.TemporaryDirectory(prefix="grading-notebook-")
+        environment["JUPYTER_CONFIG_DIR"] = temporary_directory.name
+        command = [
+            "jupyter",
+            "nbconvert",
+            "--to",
+            "notebook",
+            "--execute",
+            str(solution),
+            "--output",
+            "executed.ipynb",
+            "--output-dir",
+            temporary_directory.name,
+            f"--ExecutePreprocessor.timeout={timeout}",
+        ]
+
+    try:
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env=environment,
+        )
+    except (subprocess.TimeoutExpired, OSError) as error:
+        if temporary_directory is not None:
+            temporary_directory.cleanup()
+        fail(f"EXECUTION_ERROR: {error}", 2)
+
+    if temporary_directory is not None:
+        temporary_directory.cleanup()
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.returncode != 0:
+        details = result.stderr.strip() or f"process exited with code {result.returncode}"
+        fail(f"EXECUTION_ERROR: {details}", 2)
+
+
+def validate_predictions(task_id: str, config: dict) -> pd.DataFrame:
+    id_column = config["id_column"]
+    target_column = config["target_column"]
+    features_path = REPO_ROOT / "dataset" / task_id / "test_features.csv"
+    predictions_path = REPO_ROOT / "outputs" / f"{task_id}_predictions.csv"
+
+    if not predictions_path.is_file():
+        fail(f"VALIDATION_ERROR: missing output file: {predictions_path}")
+
+    features = pd.read_csv(features_path)
+    predictions = pd.read_csv(predictions_path)
+    required = [id_column, target_column]
+    missing_columns = [column for column in required if column not in predictions.columns]
+    if missing_columns:
+        fail(f"VALIDATION_ERROR: missing required columns: {missing_columns}")
+    if len(predictions) != len(features):
+        fail(
+            "VALIDATION_ERROR: row count mismatch: "
+            f"expected {len(features)}, got {len(predictions)}"
+        )
+    if predictions[required].isna().any().any():
+        fail("VALIDATION_ERROR: predictions contain missing values")
+    if predictions[id_column].duplicated().any():
+        fail("VALIDATION_ERROR: prediction IDs must be unique")
+    expected_ids = set(features[id_column])
+    predicted_ids = set(predictions[id_column])
+    if predicted_ids != expected_ids:
+        fail("VALIDATION_ERROR: prediction IDs do not match test feature IDs")
+    return predictions[required]
+
+
+def grade(task_id: str, config: dict, predictions: pd.DataFrame) -> None:
+    id_column = config["id_column"]
+    target_column = config["target_column"]
+    labels_path = REPO_ROOT / "grading" / task_id / "test_labels.csv"
+    labels = pd.read_csv(labels_path)
+
+    if labels[id_column].duplicated().any():
+        fail("GRADING_ERROR: label IDs must be unique")
+    evaluated = labels.merge(
+        predictions,
+        on=id_column,
+        how="left",
+        validate="one_to_one",
+        suffixes=("_true", "_pred"),
+    )
+    predicted_column = f"{target_column}_pred"
+    true_column = f"{target_column}_true"
+    if evaluated[predicted_column].isna().any():
+        count = int(evaluated[predicted_column].isna().sum())
+        fail(f"VALIDATION_ERROR: {count} held-out rows have no prediction")
+
+    metric = config.get("metric")
+    if metric != "f1":
+        fail(f"CONFIG_ERROR: unsupported metric: {metric}")
+    score = f1_score(
+        evaluated[true_column],
+        evaluated[predicted_column],
+        average=config.get("average"),
+    )
+    threshold = float(config["threshold"])
+    print(f"F1 score ({config.get('average')}): {score:.6f}")
+    print(f"Threshold: {threshold:.6f}")
+    if score < threshold:
+        fail(f"METRIC_FAILED: {score:.6f} < {threshold:.6f}")
+    print(f"METRIC_PASSED: {score:.6f} >= {threshold:.6f}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task", required=True, help="Task ID from task/<id>/config.yaml")
+    parser.add_argument("--sanity-only", action="store_true")
+    args = parser.parse_args()
+
+    config = load_config(args.task)
+    execute_solution(find_solution(args.task), int(config["timeout_seconds"]))
+    predictions = validate_predictions(args.task, config)
+    if args.sanity_only:
+        print(f"SANITY_PASSED: validated {len(predictions)} predictions")
+        return
+    grade(args.task, config, predictions)
+
+
+if __name__ == "__main__":
+    main()
