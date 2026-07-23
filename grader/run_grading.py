@@ -12,7 +12,11 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
-from sklearn.metrics import f1_score
+from sklearn.metrics import (
+    adjusted_rand_score,
+    f1_score,
+    normalized_mutual_info_score,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +38,35 @@ def load_config(task_id: str) -> dict:
     return config
 
 
+def detect_task() -> str:
+    """Return the one configured task for which a solution was submitted."""
+    configured_tasks = []
+    for config_path in sorted((REPO_ROOT / "task").glob("*/config.yaml")):
+        with config_path.open(encoding="utf-8") as stream:
+            config = yaml.safe_load(stream)
+        if isinstance(config, dict) and config.get("task_id"):
+            configured_tasks.append(str(config["task_id"]))
+
+    submitted = []
+    for task_id in configured_tasks:
+        base = REPO_ROOT / "your-sollution" / f"{task_id}_solution"
+        for suffix in (".py", ".ipynb"):
+            solution = base.with_suffix(suffix)
+            if solution.is_file():
+                submitted.append((task_id, solution))
+
+    if not submitted:
+        expected = ", ".join(f"{task_id}_solution.py/.ipynb" for task_id in configured_tasks)
+        fail(
+            "DETECTION_ERROR: no configured task solution found in your-sollution/. "
+            f"Expected one of: {expected or 'no tasks are configured'}"
+        )
+    if len(submitted) > 1:
+        names = ", ".join(str(path.relative_to(REPO_ROOT)) for _, path in submitted)
+        fail(f"DETECTION_ERROR: submit exactly one solution; found: {names}")
+    return submitted[0][0]
+
+
 def find_solution(task_id: str) -> Path:
     base = REPO_ROOT / "your-sollution" / f"{task_id}_solution"
     candidates = [base.with_suffix(".py"), base.with_suffix(".ipynb")]
@@ -48,6 +81,27 @@ def find_solution(task_id: str) -> Path:
     if len(found) > 1:
         fail("EXECUTION_ERROR: submit only one Task solution (.py or .ipynb)", 2)
     return found[0]
+
+
+def install_task_requirements(task_id: str, timeout: int) -> None:
+    requirements = REPO_ROOT / "task" / task_id / "requirements.txt"
+    if not requirements.is_file():
+        return
+    print(f"Installing task dependencies from {requirements.relative_to(REPO_ROOT)}")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(requirements)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as error:
+        fail(f"EXECUTION_ERROR: task dependency installation failed: {error}", 2)
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip()
+        fail(f"EXECUTION_ERROR: task dependency installation failed: {details}", 2)
 
 
 def execute_solution(solution: Path, timeout: int) -> None:
@@ -132,6 +186,8 @@ def grade(task_id: str, config: dict, predictions: pd.DataFrame) -> None:
     id_column = config["id_column"]
     target_column = config["target_column"]
     labels_path = REPO_ROOT / "grading" / task_id / "test_labels.csv"
+    if not labels_path.is_file():
+        fail(f"GRADING_ERROR: missing held-out labels: {labels_path}")
     labels = pd.read_csv(labels_path)
 
     if labels[id_column].duplicated().any():
@@ -149,16 +205,25 @@ def grade(task_id: str, config: dict, predictions: pd.DataFrame) -> None:
         count = int(evaluated[predicted_column].isna().sum())
         fail(f"VALIDATION_ERROR: {count} held-out rows have no prediction")
 
-    metric = config.get("metric")
-    if metric != "f1":
-        fail(f"CONFIG_ERROR: unsupported metric: {metric}")
-    score = f1_score(
-        evaluated[true_column],
-        evaluated[predicted_column],
-        average=config.get("average"),
-    )
+    metric = str(config.get("metric", "")).lower()
+    task_type = str(config.get("type", "")).lower()
+    true_values = evaluated[true_column]
+    predicted_values = evaluated[predicted_column]
+    if metric == "f1" and task_type == "classification":
+        average = config.get("average")
+        score = f1_score(true_values, predicted_values, average=average)
+        metric_label = f"F1 score ({average})"
+    elif metric == "ari" and task_type == "clustering":
+        score = adjusted_rand_score(true_values, predicted_values)
+        metric_label = "Adjusted Rand index"
+    elif metric == "nmi" and task_type == "clustering":
+        score = normalized_mutual_info_score(true_values, predicted_values)
+        metric_label = "Normalized mutual information"
+    else:
+        fail(f"CONFIG_ERROR: unsupported type/metric combination: {task_type}/{metric}")
+
     threshold = float(config["threshold"])
-    print(f"F1 score ({config.get('average')}): {score:.6f}")
+    print(f"{metric_label}: {score:.6f}")
     print(f"Threshold: {threshold:.6f}")
     if score < threshold:
         fail(f"METRIC_FAILED: {score:.6f} < {threshold:.6f}")
@@ -167,11 +232,18 @@ def grade(task_id: str, config: dict, predictions: pd.DataFrame) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task", required=True, help="Task ID from task/<id>/config.yaml")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--task", help="Task ID from task/<id>/config.yaml")
+    mode.add_argument("--detect-task", action="store_true")
     parser.add_argument("--sanity-only", action="store_true")
     args = parser.parse_args()
 
+    if args.detect_task:
+        print(detect_task())
+        return
+
     config = load_config(args.task)
+    install_task_requirements(args.task, int(config["timeout_seconds"]))
     execute_solution(find_solution(args.task), int(config["timeout_seconds"]))
     predictions = validate_predictions(args.task, config)
     if args.sanity_only:

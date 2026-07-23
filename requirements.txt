@@ -3,5 +3,3 @@ scikit-learn
 PyYAML
 nbconvert
 jupyter
-matplotlib
-seaborn
