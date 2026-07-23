@@ -1,0 +1,5 @@
+matplotlib
+networkx
+seaborn
+torch
+torch-geometric

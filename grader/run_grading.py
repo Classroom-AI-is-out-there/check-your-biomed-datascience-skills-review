@@ -176,6 +176,11 @@ def validate_predictions(task_id: str, config: dict) -> pd.DataFrame:
             if id_column not in features.files:
                 fail(f"CONFIG_ERROR: {features_path} has no {id_column} array")
             expected_ids = pd.Series(features[id_column])
+    elif features_path.suffix == ".txt":
+        with features_path.open(encoding="utf-8") as stream:
+            expected_ids = pd.Series(
+                line.split(maxsplit=1)[0] for line in stream if line.strip()
+            )
     else:
         fail(f"CONFIG_ERROR: unsupported test feature format: {features_path.suffix}")
 
