@@ -10,6 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import yaml
 from sklearn.metrics import (
@@ -154,28 +155,57 @@ def execute_solution(solution: Path, timeout: int) -> None:
 def validate_predictions(task_id: str, config: dict) -> pd.DataFrame:
     id_column = config["id_column"]
     target_column = config["target_column"]
-    features_path = REPO_ROOT / "dataset" / task_id / "test_features.csv"
+    feature_candidates = sorted(
+        (REPO_ROOT / "dataset" / task_id).glob("test_features.*")
+    )
+    if len(feature_candidates) != 1:
+        fail(
+            "CONFIG_ERROR: expected exactly one test_features file, found "
+            f"{len(feature_candidates)}"
+        )
+    features_path = feature_candidates[0]
     predictions_path = REPO_ROOT / "outputs" / f"{task_id}_predictions.csv"
 
     if not predictions_path.is_file():
         fail(f"VALIDATION_ERROR: missing output file: {predictions_path}")
 
-    features = pd.read_csv(features_path)
+    if features_path.suffix == ".csv":
+        expected_ids = pd.read_csv(features_path, usecols=[id_column])[id_column]
+    elif features_path.suffix == ".npz":
+        with np.load(features_path, allow_pickle=False) as features:
+            if id_column not in features.files:
+                fail(f"CONFIG_ERROR: {features_path} has no {id_column} array")
+            expected_ids = pd.Series(features[id_column])
+    elif features_path.suffix == ".txt":
+        with features_path.open(encoding="utf-8") as stream:
+            expected_ids = pd.Series(
+                line.split(maxsplit=1)[0] for line in stream if line.strip()
+            )
+    elif features_path.suffix in {".fasta", ".fa", ".faa"}:
+        with features_path.open(encoding="utf-8") as stream:
+            expected_ids = pd.Series(
+                line[1:].split(maxsplit=1)[0]
+                for line in stream
+                if line.startswith(">")
+            )
+    else:
+        fail(f"CONFIG_ERROR: unsupported test feature format: {features_path.suffix}")
+
     predictions = pd.read_csv(predictions_path)
     required = [id_column, target_column]
     missing_columns = [column for column in required if column not in predictions.columns]
     if missing_columns:
         fail(f"VALIDATION_ERROR: missing required columns: {missing_columns}")
-    if len(predictions) != len(features):
+    if len(predictions) != len(expected_ids):
         fail(
             "VALIDATION_ERROR: row count mismatch: "
-            f"expected {len(features)}, got {len(predictions)}"
+            f"expected {len(expected_ids)}, got {len(predictions)}"
         )
     if predictions[required].isna().any().any():
         fail("VALIDATION_ERROR: predictions contain missing values")
     if predictions[id_column].duplicated().any():
         fail("VALIDATION_ERROR: prediction IDs must be unique")
-    expected_ids = set(features[id_column])
+    expected_ids = set(expected_ids)
     predicted_ids = set(predictions[id_column])
     if predicted_ids != expected_ids:
         fail("VALIDATION_ERROR: prediction IDs do not match test feature IDs")
@@ -216,6 +246,8 @@ def grade(task_id: str, config: dict, predictions: pd.DataFrame) -> None:
     elif metric == "ari" and task_type == "clustering":
         score = adjusted_rand_score(true_values, predicted_values)
         metric_label = "Adjusted Rand index"
+        nmi = normalized_mutual_info_score(true_values, predicted_values)
+        print(f"Normalized mutual information (visibility only): {nmi:.6f}")
     elif metric == "nmi" and task_type == "clustering":
         score = normalized_mutual_info_score(true_values, predicted_values)
         metric_label = "Normalized mutual information"
