@@ -181,6 +181,13 @@ def validate_predictions(task_id: str, config: dict) -> pd.DataFrame:
             expected_ids = pd.Series(
                 line.split(maxsplit=1)[0] for line in stream if line.strip()
             )
+    elif features_path.suffix in {".fasta", ".fa", ".faa"}:
+        with features_path.open(encoding="utf-8") as stream:
+            expected_ids = pd.Series(
+                line[1:].split(maxsplit=1)[0]
+                for line in stream
+                if line.startswith(">")
+            )
     else:
         fail(f"CONFIG_ERROR: unsupported test feature format: {features_path.suffix}")
 
