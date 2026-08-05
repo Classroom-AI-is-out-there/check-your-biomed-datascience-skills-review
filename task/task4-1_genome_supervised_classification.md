@@ -1,3 +1,11 @@
+## English / Русский
+
+### English
+This project supports both local execution from a cloned repository and direct loading of public data from the GitHub dataset mirror when the notebook is run in a hosted environment such as Colab.
+
+### Русский
+Этот проект поддерживает как локальный запуск из клонированного репозитория, так и прямую загрузку открытых данных из GitHub-репозитория с набором данных, когда ноутбук запускается в hosted-среде, например в Colab.
+
 # Задание 4.1: Классификация генетических популяций с учителем
 
 Классифицируйте людей по генетическим популяциям на основе размеченных нуклеотидных данных. Используйте граф генетического сходства и графовый классификатор, например GCN, как показано в базовом ноутбуке.

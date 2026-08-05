@@ -1,3 +1,11 @@
+## English / Русский
+
+### English
+This project supports both local execution from a cloned repository and direct loading of public data from the GitHub dataset mirror when the notebook is run in a hosted environment such as Colab.
+
+### Русский
+Этот проект поддерживает как локальный запуск из клонированного репозитория, так и прямую загрузку открытых данных из GitHub-репозитория с набором данных, когда ноутбук запускается в hosted-среде, например в Colab.
+
 # Задание 2.1: Классификация сердечных сокращений по ЭКГ с учителем
 
 Обучите классификатор на размеченных сегментах ЭКГ и предскажите класс ритма для каждого отложенного сердечного сокращения. В репозитории находится набор на основе ECG5000 с пятью целочисленными классами.
