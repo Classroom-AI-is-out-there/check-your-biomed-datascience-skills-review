@@ -4,5 +4,16 @@ metric: f1
 average: macro
 id_column: sample_id
 target_column: prediction
-threshold: 0.10
-timeout_seconds: 300
+threshold: 0.1
+install_timeout_seconds: 600
+execution_timeout_seconds: 300
+train_data: dataset/task4_1/train.txt
+test_features: dataset/task4_1/test_features.txt
+allowed_labels:
+- ACB
+- ASW
+- ESN
+- GWD
+- LWK
+- MSL
+- YRI

@@ -4,4 +4,9 @@ metric: ari
 id_column: sequence_id
 target_column: cluster
 threshold: 0.35
-timeout_seconds: 300
+install_timeout_seconds: 600
+execution_timeout_seconds: 300
+train_data: dataset/task4_2/train.fasta
+test_features: dataset/task4_2/test_features.fasta
+min_clusters: 2
+max_clusters: 20

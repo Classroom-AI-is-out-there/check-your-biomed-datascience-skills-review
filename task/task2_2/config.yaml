@@ -4,4 +4,9 @@ metric: ari
 id_column: window_id
 target_column: prediction
 threshold: 0.05
-timeout_seconds: 300
+install_timeout_seconds: 600
+execution_timeout_seconds: 300
+train_data: dataset/task2_2/train.npz
+test_features: dataset/task2_2/test_features.npz
+min_clusters: 2
+max_clusters: 20
