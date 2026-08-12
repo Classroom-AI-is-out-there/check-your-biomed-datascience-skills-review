@@ -1,0 +1,307 @@
+
+<style>
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+.step-dot{width:10px;height:10px;border-radius:50%;background:var(--border-strong);transition:background .3s;flex-shrink:0;}
+.step-dot.done{background:var(--text-accent);}
+.step-dot.active{background:var(--fill-accent);}
+.panel{display:none;animation:fadein .25s ease;}
+.panel.visible{display:block;}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;}
+.tag-num{background:var(--bg-accent);color:var(--text-accent);}
+.tag-cat{background:var(--bg-warning);color:var(--text-warning);}
+.tag-tgt{background:var(--bg-danger);color:var(--text-danger);}
+.tag-miss{background:var(--surface-1);color:var(--text-muted);border:0.5px solid var(--border-strong);}
+.bar-bg{background:var(--surface-1);border-radius:4px;overflow:hidden;height:10px;flex:1;}
+.bar-fill{height:100%;border-radius:4px;transition:width .6s ease;}
+.metric-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;}
+.metric-name{min-width:90px;color:var(--text-secondary);}
+.metric-val{min-width:38px;text-align:right;font-weight:500;color:var(--text-primary);}
+.model-btn{background:var(--surface-1);border:0.5px solid var(--border-strong);border-radius:var(--radius);padding:7px 12px;font-size:13px;color:var(--text-secondary);cursor:pointer;transition:all .15s;white-space:nowrap;}
+.model-btn.sel{background:var(--bg-accent);border-color:var(--border-accent);color:var(--text-accent);font-weight:500;}
+.feat-bar{height:16px;border-radius:3px;transition:width .5s ease;}
+.code{font-family:var(--font-mono);font-size:12px;background:var(--surface-1);padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);color:var(--text-secondary);line-height:1.6;}
+</style>
+
+<h2 class="sr-only">Интерактивный симулятор конвейера Task 1: классификация табличных данных пациентов диспансеризации от EDA до метрик качества</h2>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+  <div id="d0" class="step-dot active"></div>
+  <div style="height:1px;flex:1;background:var(--border);min-width:12px;"></div>
+  <div id="d1" class="step-dot"></div>
+  <div style="height:1px;flex:1;background:var(--border);min-width:12px;"></div>
+  <div id="d2" class="step-dot"></div>
+  <div style="height:1px;flex:1;background:var(--border);min-width:12px;"></div>
+  <div id="d3" class="step-dot"></div>
+  <div style="height:1px;flex:1;background:var(--border);min-width:12px;"></div>
+  <div id="d4" class="step-dot"></div>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:20px;margin-top:-14px;">
+  <span>Данные</span><span>EDA</span><span>Предобработка</span><span>Модель</span><span>Метрики</span>
+</div>
+
+<div id="p0" class="panel visible">
+  <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;">Датасет: 1000 пациентов, 12 признаков, бинарная классификация (риск заболевания: да/нет).</p>
+  <div style="overflow-x:auto;">
+  <table style="width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;">
+    <colgroup><col style="width:22%"><col style="width:16%"><col style="width:22%"><col style="width:22%"><col style="width:18%"></colgroup>
+    <thead><tr style="border-bottom:0.5px solid var(--border-strong);">
+      <th style="padding:6px 8px;text-align:left;color:var(--text-muted);font-weight:500;">Признак</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-muted);font-weight:500;">Тип</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-muted);font-weight:500;">Диапазон / значения</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-muted);font-weight:500;">Пропуски</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-muted);font-weight:500;"></th>
+    </tr></thead>
+    <tbody id="feat-table"></tbody>
+  </table>
+  </div>
+  <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;">
+    <span class="tag tag-num">Числовой</span>
+    <span class="tag tag-cat">Категориальный</span>
+    <span class="tag tag-tgt">Целевой</span>
+    <span class="tag tag-miss">Есть пропуски</span>
+  </div>
+</div>
+
+<div id="p1" class="panel">
+  <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;">Разведочный анализ: распределение классов и важность признаков по корреляции с целевой переменной.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div style="background:var(--surface-1);border-radius:8px;padding:12px;">
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 8px;">Распределение классов</p>
+      <div style="display:flex;height:28px;border-radius:4px;overflow:hidden;">
+        <div style="width:62%;background:#1D9E75;display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:11px;color:#fff;font-weight:500;">Здоров 62%</span>
+        </div>
+        <div style="width:38%;background:#D85A30;display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:11px;color:#fff;font-weight:500;">Риск 38%</span>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Умеренный дисбаланс — нужен macro F1</p>
+    </div>
+    <div style="background:var(--surface-1);border-radius:8px;padding:12px;">
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 8px;">Пропуски в данных</p>
+      <p style="font-size:22px;font-weight:500;color:var(--text-primary);margin:0;">4.7%</p>
+      <p style="font-size:11px;color:var(--text-muted);margin:4px 0 0;">холестерин (8.2%) и ИМТ (1.2%)</p>
+    </div>
+  </div>
+  <p style="font-size:12px;color:var(--text-muted);margin:0 0 8px;">Корреляция признаков с целевой переменной</p>
+  <div id="corr-bars"></div>
+</div>
+
+<div id="p2" class="panel">
+  <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;">Выберите стратегию предобработки для каждого типа проблем:</p>
+  <div style="display:flex;flex-direction:column;gap:10px;">
+    <div style="background:var(--surface-1);border-radius:8px;padding:12px;">
+      <p style="font-size:12px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Пропущенные значения (холестерин, ИМТ)</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="miss-opts">
+        <button class="model-btn sel" onclick="pick('miss',this,'Медиана (рекомендуется)')">Медиана</button>
+        <button class="model-btn" onclick="pick('miss',this,'Среднее (чувствительно к выбросам)')">Среднее</button>
+        <button class="model-btn" onclick="pick('miss',this,'Удалить строки (потеря 8.2% данных)')">Удалить строки</button>
+        <button class="model-btn" onclick="pick('miss',this,'KNN-импутация (медленнее, точнее)')">KNN-импутация</button>
+      </div>
+      <p id="miss-note" style="font-size:11px;color:var(--text-accent);margin:6px 0 0;">Медиана (рекомендуется)</p>
+    </div>
+    <div style="background:var(--surface-1);border-radius:8px;padding:12px;">
+      <p style="font-size:12px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Числовые признаки (возраст, давление, холестерин...)</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="scale-opts">
+        <button class="model-btn sel" onclick="pick('scale',this,'StandardScaler — нормировка по Z-оценке')">StandardScaler</button>
+        <button class="model-btn" onclick="pick('scale',this,'MinMaxScaler — диапазон [0,1]')">MinMaxScaler</button>
+        <button class="model-btn" onclick="pick('scale',this,'Без масштабирования (дерево решений не требует)')">Без масштабирования</button>
+      </div>
+      <p id="scale-note" style="font-size:11px;color:var(--text-accent);margin:6px 0 0;">StandardScaler — нормировка по Z-оценке</p>
+    </div>
+    <div style="background:var(--surface-1);border-radius:8px;padding:12px;">
+      <p style="font-size:12px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Категориальные признаки (пол, курение, заболевания)</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="enc-opts">
+        <button class="model-btn sel" onclick="pick('enc',this,'One-Hot Encoding — создаёт бинарные столбцы')">One-Hot</button>
+        <button class="model-btn" onclick="pick('enc',this,'Label Encoding — числа 0/1/2 (только для дерева)')">Label Encoding</button>
+        <button class="model-btn" onclick="pick('enc',this,'Ordinal Encoding — для порядковых категорий')">Ordinal</button>
+      </div>
+      <p id="enc-note" style="font-size:11px;color:var(--text-accent);margin:6px 0 0;">One-Hot Encoding — создаёт бинарные столбцы</p>
+    </div>
+  </div>
+</div>
+
+<div id="p3" class="panel">
+  <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;">Выберите алгоритм и посмотрите ориентировочные результаты:</p>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;" id="model-opts">
+    <button class="model-btn sel" onclick="pickModel('lr')">Лог. регрессия</button>
+    <button class="model-btn" onclick="pickModel('dt')">Дерево решений</button>
+    <button class="model-btn" onclick="pickModel('rf')">Random Forest</button>
+    <button class="model-btn" onclick="pickModel('xgb')">XGBoost</button>
+  </div>
+  <div id="model-desc" class="code" style="margin-bottom:12px;"></div>
+  <div id="model-pros" style="font-size:12px;color:var(--text-secondary);"></div>
+</div>
+
+<div id="p4" class="panel">
+  <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;">Сравнение метрик по выбранной модели и базовым линиям. Нажмите на метрику для объяснения.</p>
+  <div id="metrics-view"></div>
+  <div id="metric-explain" style="margin-top:12px;font-size:12px;color:var(--text-secondary);background:var(--surface-1);border-radius:8px;padding:10px 12px;min-height:36px;"></div>
+  <div style="margin-top:14px;">
+    <button onclick="sendPrompt('Как построить и интерпретировать матрицу ошибок (confusion matrix) для задачи диспансеризации пациентов?')">Матрица ошибок ↗</button>
+    <button onclick="sendPrompt('Как интерпретировать ROC-AUC кривую в контексте медицинской диагностики?')" style="margin-left:8px;">ROC-AUC кривая ↗</button>
+    <button onclick="sendPrompt('Как выбрать порог классификации (threshold) для минимизации ложноотрицательных результатов?')" style="margin-left:8px;">Порог классификации ↗</button>
+  </div>
+</div>
+
+<div style="display:flex;justify-content:space-between;margin-top:20px;">
+  <button id="btn-prev" onclick="move(-1)" style="visibility:hidden;">Назад</button>
+  <button id="btn-next" onclick="move(1)">Далее →</button>
+</div>
+
+<script>
+const FEATS = [
+  {n:'Возраст',       t:'num', r:'18–80 лет',     miss:false},
+  {n:'Пол',           t:'cat', r:'М / Ж',          miss:false},
+  {n:'ИМТ',          t:'num', r:'14.5–48.2',      miss:true},
+  {n:'Давление сист.',t:'num', r:'90–200 мм рт.ст.',miss:false},
+  {n:'Давление диаст.',t:'num',r:'60–130 мм рт.ст.',miss:false},
+  {n:'Холестерин',    t:'num', r:'2.8–9.1 ммоль/л',miss:true},
+  {n:'Глюкоза',       t:'num', r:'3.5–14.0 ммоль/л',miss:false},
+  {n:'Курение',       t:'cat', r:'Нет/Нет/Да',     miss:false},
+  {n:'Физ. активность',t:'cat',r:'Низк./Средн./Выс.',miss:false},
+  {n:'Алкоголь',      t:'cat', r:'Нет/Умер./Выс.', miss:false},
+  {n:'Хр. заболевания',t:'cat',r:'Нет/Одно/Несколько',miss:false},
+  {n:'Целевой (риск)', t:'tgt',r:'0 / 1',          miss:false},
+];
+
+const CORR = [
+  {n:'Холестерин',    v:0.61},
+  {n:'Давление сист.',v:0.54},
+  {n:'Возраст',       v:0.49},
+  {n:'ИМТ',          v:0.43},
+  {n:'Глюкоза',       v:0.38},
+  {n:'Курение',       v:0.31},
+  {n:'Хр. заболевания',v:0.28},
+  {n:'Физ. активность',v:-0.22},
+];
+
+const MODELS = {
+  lr: {
+    label:'Логистическая регрессия',
+    code:'from sklearn.linear_model import LogisticRegression\nfrom sklearn.preprocessing import StandardScaler\nfrom sklearn.pipeline import Pipeline\n\npipe = Pipeline([\n    ("scaler", StandardScaler()),\n    ("clf", LogisticRegression(C=1.0, max_iter=1000))\n])\npipe.fit(X_train, y_train)',
+    pros:'Интерпретируемые коэффициенты признаков. Быстро обучается. Хороший baseline. Требует масштабирования.',
+    acc:0.76, recall:0.71, f1:0.73, auc:0.81
+  },
+  dt: {
+    label:'Дерево решений',
+    code:'from sklearn.tree import DecisionTreeClassifier\n\nclf = DecisionTreeClassifier(\n    max_depth=6,\n    min_samples_leaf=10,\n    class_weight="balanced"\n)\nclf.fit(X_train, y_train)',
+    pros:'Интерпретируемо через if/else правила. Не требует масштабирования. Склонно к переобучению без ограничений.',
+    acc:0.79, recall:0.75, f1:0.77, auc:0.83
+  },
+  rf: {
+    label:'Random Forest',
+    code:'from sklearn.ensemble import RandomForestClassifier\n\nclf = RandomForestClassifier(\n    n_estimators=200,\n    max_depth=8,\n    class_weight="balanced",\n    random_state=42\n)\nclf.fit(X_train, y_train)',
+    pros:'Ансамблевый метод — снижает дисперсию. Встроенная важность признаков. Устойчив к выбросам.',
+    acc:0.84, recall:0.81, f1:0.83, auc:0.90
+  },
+  xgb: {
+    label:'XGBoost',
+    code:'from xgboost import XGBClassifier\n\nclf = XGBClassifier(\n    n_estimators=300,\n    max_depth=5,\n    learning_rate=0.05,\n    scale_pos_weight=1.63,\n    eval_metric="logloss"\n)\nclf.fit(X_train, y_train)',
+    pros:'Лучший результат. scale_pos_weight компенсирует дисбаланс классов (62/38 ≈ 1.63). Требует подбора гиперпараметров.',
+    acc:0.87, recall:0.85, f1:0.86, auc:0.93
+  }
+};
+
+const METRIC_EXPLAIN = {
+  Accuracy: 'Доля правильных предсказаний из всех. При дисбалансе классов может вводить в заблуждение: модель «всегда здоров» даёт Accuracy = 62%.',
+  Recall: 'Полнота — доля реально больных, выявленных моделью. В медицине критична: пропущенный больной (ложноотрицательный) опаснее ложной тревоги.',
+  'macro F1': 'Среднее гармоническое Precision и Recall, усреднённое по классам с равным весом. Основная метрика при дисбалансе.',
+  'ROC-AUC': 'Площадь под ROC-кривой. Показывает способность модели ранжировать пациентов: 1.0 = идеально, 0.5 = случайно.'
+};
+
+let step = 0, selModel = 'lr';
+
+function renderTable(){
+  const tb = document.getElementById('feat-table');
+  tb.innerHTML = FEATS.map(f=>{
+    const tc = f.t==='num'?'tag-num':f.t==='cat'?'tag-cat':'tag-tgt';
+    const tl = f.t==='num'?'Числовой':f.t==='cat'?'Категориальный':'Целевой';
+    return `<tr style="border-bottom:0.5px solid var(--border);">
+      <td style="padding:5px 8px;font-size:12px;color:var(--text-primary);">${f.n}</td>
+      <td style="padding:5px 8px;"><span class="tag ${tc}">${tl}</span></td>
+      <td style="padding:5px 8px;font-size:12px;color:var(--text-secondary);">${f.r}</td>
+      <td style="padding:5px 8px;font-size:12px;">${f.miss?'<span class="tag tag-miss">8.2%</span>':''}</td>
+      <td></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCorr(){
+  const c = document.getElementById('corr-bars');
+  c.innerHTML = CORR.map(r=>{
+    const pos = r.v>0;
+    const pct = Math.abs(r.v)*100;
+    const col = pos?'#D85A30':'#378ADD';
+    return `<div class="metric-row">
+      <span class="metric-name">${r.n}</span>
+      <div class="bar-bg"><div class="feat-bar" style="width:${pct}%;background:${col};"></div></div>
+      <span class="metric-val" style="color:${col};">${r.v>0?'+':''}${r.v.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderModel(k){
+  const m = MODELS[k];
+  document.getElementById('model-desc').textContent = m.code;
+  document.getElementById('model-pros').textContent = m.pros;
+}
+
+function renderMetrics(){
+  const m = MODELS[selModel];
+  const METRICS = [
+    {n:'Accuracy',  v:m.acc,  base:0.62, best:0.87},
+    {n:'Recall',    v:m.recall,base:0.50,best:0.85},
+    {n:'macro F1',  v:m.f1,   base:0.48, best:0.86},
+    {n:'ROC-AUC',   v:m.auc,  base:0.50, best:0.93},
+  ];
+  document.getElementById('metrics-view').innerHTML = METRICS.map(r=>{
+    const pct = r.v*100;
+    const col = r.v>=0.85?'#1D9E75':r.v>=0.75?'#EF9F27':'#D85A30';
+    return `<div class="metric-row" style="cursor:pointer;" onclick="explain('${r.n}')">
+      <span class="metric-name">${r.n}</span>
+      <div class="bar-bg"><div class="feat-bar" style="width:${pct}%;background:${col};"></div></div>
+      <span class="metric-val">${r.v.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('metric-explain').textContent = 'Нажмите на метрику для объяснения.';
+}
+
+function explain(n){
+  document.getElementById('metric-explain').textContent = METRIC_EXPLAIN[n]||'';
+}
+
+function pick(key,btn,note){
+  const g = document.getElementById(key+'-opts');
+  g.querySelectorAll('.model-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  document.getElementById(key+'-note').textContent = note;
+}
+
+function pickModel(k){
+  selModel = k;
+  document.getElementById('model-opts').querySelectorAll('.model-btn').forEach(b=>b.classList.remove('sel'));
+  event.target.classList.add('sel');
+  renderModel(k);
+}
+
+function move(d){
+  const panels = document.querySelectorAll('.panel');
+  const dots = document.querySelectorAll('.step-dot');
+  panels[step].classList.remove('visible');
+  dots[step].classList.remove('active');
+  dots[step].classList.add('done');
+  step = Math.max(0, Math.min(4, step+d));
+  panels[step].classList.add('visible');
+  dots[step].classList.remove('done');
+  dots[step].classList.add('active');
+  document.getElementById('btn-prev').style.visibility = step===0?'hidden':'visible';
+  document.getElementById('btn-next').textContent = step===4?'Завершить':'Далее →';
+  if(step===4) renderMetrics();
+}
+
+renderTable();
+renderCorr();
+renderModel('lr');
+</script>
