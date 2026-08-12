@@ -4,5 +4,14 @@ metric: f1
 average: macro
 id_column: heartbeat_id
 target_column: prediction
-threshold: 0.40
-timeout_seconds: 300
+threshold: 0.4
+install_timeout_seconds: 600
+execution_timeout_seconds: 300
+train_data: dataset/task2_1/train.csv
+test_features: dataset/task2_1/test_features.csv
+allowed_labels:
+- 0
+- 1
+- 2
+- 3
+- 4

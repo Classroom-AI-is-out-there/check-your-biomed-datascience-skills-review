@@ -1,288 +1,176 @@
 #!/usr/bin/env python3
-"""Execute and grade a task solution from the repository root."""
-
+"""Beginner-friendly, single-execution grader for the biomedical tasks."""
 from __future__ import annotations
 
-import argparse
-import os
-import subprocess
-import sys
-import tempfile
+import argparse, json, os, subprocess, sys, tempfile, time, warnings
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import yaml
-from sklearn.metrics import (
-    adjusted_rand_score,
-    f1_score,
-    normalized_mutual_info_score,
-)
-
+from sklearn.metrics import adjusted_rand_score, f1_score, normalized_mutual_info_score
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SUBMISSION_DIR = REPO_ROOT / "your_solution"
 
+class GradingError(Exception):
+    """An actionable error which is safe to show to a student."""
 
-def fail(message: str, exit_code: int = 1) -> None:
-    print(message, file=sys.stderr)
-    raise SystemExit(exit_code)
-
+def task_ids() -> list[str]:
+    return [p.parent.name for p in sorted((REPO_ROOT / "task").glob("*/config.yaml"))]
 
 def load_config(task_id: str) -> dict:
-    config_path = REPO_ROOT / "task" / task_id / "config.yaml"
-    if not config_path.is_file():
-        fail(f"CONFIG_ERROR: missing configuration: {config_path}")
-    with config_path.open(encoding="utf-8") as stream:
-        config = yaml.safe_load(stream)
+    path = REPO_ROOT / "task" / task_id / "config.yaml"
+    if not path.is_file():
+        raise GradingError(f"CONFIG_ERROR [{task_id}]: configuration does not exist: {path}")
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(config, dict) or config.get("task_id") != task_id:
-        fail(f"CONFIG_ERROR: invalid configuration for {task_id}")
+        raise GradingError(f"CONFIG_ERROR [{task_id}]: task_id is missing or inconsistent in {path}")
+    if "timeout_seconds" in config:
+        warnings.warn("timeout_seconds is deprecated; use install_timeout_seconds and execution_timeout_seconds", DeprecationWarning)
+        config.setdefault("install_timeout_seconds", config["timeout_seconds"])
+        config.setdefault("execution_timeout_seconds", config["timeout_seconds"])
+    required = {"type", "metric", "id_column", "target_column", "threshold", "install_timeout_seconds", "execution_timeout_seconds"}
+    missing = sorted(required - config.keys())
+    if missing: raise GradingError(f"CONFIG_ERROR [{task_id}]: missing keys in {path}: {missing}")
     return config
 
-
-def detect_task() -> str:
-    """Return the one configured task for which a solution was submitted."""
-    configured_tasks = []
-    for config_path in sorted((REPO_ROOT / "task").glob("*/config.yaml")):
-        with config_path.open(encoding="utf-8") as stream:
-            config = yaml.safe_load(stream)
-        if isinstance(config, dict) and config.get("task_id"):
-            configured_tasks.append(str(config["task_id"]))
-
-    submitted = []
-    for task_id in configured_tasks:
-        base = REPO_ROOT / "your-sollution" / f"{task_id}_solution"
+def submitted_solutions() -> list[tuple[str, Path]]:
+    found=[]
+    for task_id in task_ids():
         for suffix in (".py", ".ipynb"):
-            solution = base.with_suffix(suffix)
-            if solution.is_file():
-                submitted.append((task_id, solution))
+            path=SUBMISSION_DIR / f"{task_id}_solution{suffix}"
+            if path.is_file(): found.append((task_id,path))
+    return found
 
-    if not submitted:
-        expected = ", ".join(f"{task_id}_solution.py/.ipynb" for task_id in configured_tasks)
-        fail(
-            "DETECTION_ERROR: no configured task solution found in your-sollution/. "
-            f"Expected one of: {expected or 'no tasks are configured'}"
-        )
-    if len(submitted) > 1:
-        names = ", ".join(str(path.relative_to(REPO_ROOT)) for _, path in submitted)
-        fail(f"DETECTION_ERROR: submit exactly one solution; found: {names}")
-    return submitted[0][0]
-
-
-def find_solution(task_id: str) -> Path:
-    base = REPO_ROOT / "your-sollution" / f"{task_id}_solution"
-    candidates = [base.with_suffix(".py"), base.with_suffix(".ipynb")]
-    found = [path for path in candidates if path.is_file()]
+def detect_task() -> tuple[str, Path]:
+    found=submitted_solutions()
     if not found:
-        fail(
-            "EXECUTION_ERROR: solution file not found; expected "
-            f"{candidates[0].relative_to(REPO_ROOT)} or "
-            f"{candidates[1].relative_to(REPO_ROOT)}",
-            2,
-        )
-    if len(found) > 1:
-        fail("EXECUTION_ERROR: submit only one Task solution (.py or .ipynb)", 2)
+        raise GradingError("DETECTION_ERROR: No active solution was found.\n\nChoose one task and run:\n  python tools/start_task.py task2_1\n\nExpected: your_solution/<task_id>_solution.py or .ipynb")
+    if len(found)!=1:
+        names="\n  ".join(str(p.relative_to(REPO_ROOT)) for _,p in found)
+        raise GradingError(f"DETECTION_ERROR: Submit exactly one solution; found {len(found)} files:\n  {names}\nRemove the extra file(s) from your_solution/ and retry.")
     return found[0]
 
+def find_solution(task_id: str) -> Path:
+    found=[p for tid,p in submitted_solutions() if tid==task_id]
+    if len(found)!=1:
+        listing=", ".join(str(p.relative_to(REPO_ROOT)) for p in found) or "none"
+        raise GradingError(f"EXECUTION_ERROR [{task_id}]: expected exactly one .py or .ipynb solution; found: {listing}")
+    return found[0]
 
-def install_task_requirements(task_id: str, timeout: int) -> None:
-    requirements = REPO_ROOT / "task" / task_id / "requirements.txt"
-    if not requirements.is_file():
-        return
-    print(f"Installing task dependencies from {requirements.relative_to(REPO_ROOT)}")
+def install_requirements(task_id: str, timeout: int, skip: bool=False) -> None:
+    if skip: return
+    paths=[REPO_ROOT/"requirements.txt", REPO_ROOT/"task"/task_id/"requirements.txt"]
+    command=[sys.executable,"-m","pip","install"] + [x for p in paths if p.is_file() for x in ("-r",str(p))]
+    try: result=subprocess.run(command,cwd=REPO_ROOT,text=True,capture_output=True,timeout=timeout)
+    except subprocess.TimeoutExpired: raise GradingError(f"INSTALLATION_ERROR [{task_id}]: dependency installation exceeded {timeout} seconds")
+    except OSError as e: raise GradingError(f"INSTALLATION_ERROR [{task_id}]: could not start pip: {e}")
+    if result.returncode: raise GradingError(f"INSTALLATION_ERROR [{task_id}]: pip failed. Check task/{task_id}/requirements.txt.\n{result.stderr[-2000:]}")
+
+def execute(solution: Path, task_id: str, output: Path, timeout: int) -> float:
+    env={**os.environ,"MPLBACKEND":"Agg","BIOMED_OUTPUT_PATH":str(output)}
+    # A script launched by filename otherwise places only your_solution/ on
+    # sys.path.  Keep repository helpers importable exactly as they are in a
+    # notebook launched from the repository root.
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO_ROOT), env.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+    started=time.monotonic()
+    if solution.suffix==".py": command=[sys.executable,str(solution)]; notebook_tmp=None
+    else:
+        notebook_tmp=tempfile.TemporaryDirectory(prefix="biomed-notebook-")
+        env["JUPYTER_CONFIG_DIR"]=notebook_tmp.name
+        command=["jupyter","nbconvert","--to","notebook","--execute",str(solution),"--output","executed.ipynb","--output-dir",notebook_tmp.name,f"--ExecutePreprocessor.timeout={timeout}"]
+    try: result=subprocess.run(command,cwd=REPO_ROOT,text=True,capture_output=True,timeout=timeout,env=env)
+    except subprocess.TimeoutExpired: raise GradingError(f"EXECUTION_ERROR [{task_id}]: solution exceeded {timeout} seconds")
+    except OSError as e: raise GradingError(f"EXECUTION_ERROR [{task_id}]: could not start solution: {e}")
+    finally:
+        if notebook_tmp: notebook_tmp.cleanup()
+    if result.returncode: raise GradingError(f"EXECUTION_ERROR [{task_id}] in {solution.relative_to(REPO_ROOT)}:\n{(result.stderr or result.stdout)[-3000:]}")
+    return round(time.monotonic()-started,3)
+
+def expected_ids(task_id: str, config: dict) -> pd.Series:
+    path=REPO_ROOT/config["test_features"] ; key=config["id_column"]
+    if path.suffix==".csv": return pd.read_csv(path,usecols=[key])[key]
+    if path.suffix==".npz":
+        with np.load(path,allow_pickle=False) as data: return pd.Series(data[key])
+    if path.suffix==".txt": return pd.Series([x.split(maxsplit=1)[0] for x in path.read_text().splitlines() if x.strip()])
+    if path.suffix in {".fasta",".fa",".faa"}: return pd.Series([x[1:].split(maxsplit=1)[0] for x in path.read_text().splitlines() if x.startswith(">")])
+    raise GradingError(f"CONFIG_ERROR [{task_id}]: unsupported test-feature format: {path}")
+
+def validate_predictions(task_id: str, config: dict, path: Path) -> tuple[pd.DataFrame,dict]:
+    ids=expected_ids(task_id,config); required=[config["id_column"],config["target_column"]]
+    if not path.is_file(): raise GradingError(f"VALIDATION_ERROR [{task_id}]: missing prediction file: {path}. Use get_output_path('{task_id}').")
+    try: frame=pd.read_csv(path)
+    except Exception as e: raise GradingError(f"VALIDATION_ERROR [{task_id}]: cannot parse CSV {path}: {e}")
+    duplicates=frame.columns[frame.columns.duplicated()].tolist()
+    if duplicates: raise GradingError(f"VALIDATION_ERROR [{task_id}]: duplicate CSV columns in {path}: {duplicates}")
+    missing=[c for c in required if c not in frame]
+    if missing: raise GradingError(f"VALIDATION_ERROR [{task_id}]: missing required columns in {path}: {missing}; expected {required}")
+    extras=[c for c in frame if c not in required]
+    if extras: raise GradingError(f"VALIDATION_ERROR [{task_id}]: extra columns are not allowed in {path}: {extras}")
+    if len(frame)!=len(ids): raise GradingError(f"VALIDATION_ERROR [{task_id}]: row count for {path}; expected {len(ids)}, actual {len(frame)}")
+    idc,target=required
+    if frame[idc].isna().any(): raise GradingError(f"VALIDATION_ERROR [{task_id}]: {idc} contains missing values in {path}")
+    if frame[target].isna().any(): raise GradingError(f"VALIDATION_ERROR [{task_id}]: {target} contains missing values in {path}")
+    numeric=pd.to_numeric(frame[target],errors="coerce")
+    if numeric.notna().any() and np.isinf(numeric.dropna()).any(): raise GradingError(f"VALIDATION_ERROR [{task_id}]: {target} contains infinite values in {path}")
+    if frame[idc].duplicated().any(): raise GradingError(f"VALIDATION_ERROR [{task_id}]: {idc} must be unique in {path}; duplicates found")
+    if set(map(str,frame[idc])) != set(map(str,ids)):
+        raise GradingError(f"VALIDATION_ERROR [{task_id}]: IDs in {path} do not exactly match {config['test_features']} (no missing or extra IDs allowed)")
+    if config["type"]=="classification" and "allowed_labels" in config:
+        invalid=sorted(set(frame[target])-set(config["allowed_labels"]),key=str)
+        if invalid: raise GradingError(f"VALIDATION_ERROR [{task_id}]: invalid classification labels in {path}: {invalid}; allowed {config['allowed_labels']}")
+    if config["type"]=="clustering":
+        if frame[target].map(lambda x: np.isscalar(x)).eq(False).any(): raise GradingError(f"VALIDATION_ERROR [{task_id}]: cluster labels must be scalar")
+        count=frame[target].nunique()
+        if count==1 and not config.get("allow_single_cluster",False): raise GradingError(f"VALIDATION_ERROR [{task_id}]: only one cluster was generated in {path}; create at least two")
+        if count < config.get("min_clusters",2) or count > config.get("max_clusters",len(frame)):
+            raise GradingError(f"VALIDATION_ERROR [{task_id}]: cluster count in {path}; expected {config.get('min_clusters',2)}..{config.get('max_clusters',len(frame))}, actual {count}")
+    return frame[required],{"passed":True,"rows_expected":len(ids),"rows_received":len(frame)}
+
+def metrics(task_id: str, config: dict, predictions: pd.DataFrame) -> dict:
+    labels=pd.read_csv(REPO_ROOT/"grading"/task_id/"test_labels.csv")
+    idc,target=config["id_column"],config["target_column"]
+    joined=labels.merge(predictions,on=idc,validate="one_to_one",suffixes=("_true","_pred"))
+    y,yp=joined[f"{target}_true"],joined[f"{target}_pred"]
+    if config["type"]=="classification": return {f"f1_{config['average']}":float(f1_score(y,yp,average=config["average"]))}
+    return {"ari":float(adjusted_rand_score(y,yp)),"nmi":float(normalized_mutual_info_score(y,yp))}
+
+def assess(task_id: str, sanity: bool, report_path: Path|None, skip_install: bool) -> int:
+    config=load_config(task_id); solution=find_solution(task_id)
+    report={"task_id":task_id,"solution_path":str(solution.relative_to(REPO_ROOT)),"execution":{"passed":False},"validation":{"passed":False},"metrics":{},"thresholds":{},"score":{"earned":0,"maximum":100},"feedback":[]}
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(requirements)],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, OSError) as error:
-        fail(f"EXECUTION_ERROR: task dependency installation failed: {error}", 2)
-    if result.returncode != 0:
-        details = result.stderr.strip() or result.stdout.strip()
-        fail(f"EXECUTION_ERROR: task dependency installation failed: {details}", 2)
-
-
-def execute_solution(solution: Path, timeout: int) -> None:
-    environment = os.environ.copy()
-    environment["MPLBACKEND"] = "Agg"
-    if solution.suffix == ".py":
-        command = [sys.executable, str(solution)]
-        temporary_directory = None
-    else:
-        temporary_directory = tempfile.TemporaryDirectory(prefix="grading-notebook-")
-        environment["JUPYTER_CONFIG_DIR"] = temporary_directory.name
-        command = [
-            "jupyter",
-            "nbconvert",
-            "--to",
-            "notebook",
-            "--execute",
-            str(solution),
-            "--output",
-            "executed.ipynb",
-            "--output-dir",
-            temporary_directory.name,
-            f"--ExecutePreprocessor.timeout={timeout}",
-        ]
-
-    try:
-        result = subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-            env=environment,
-        )
-    except (subprocess.TimeoutExpired, OSError) as error:
-        if temporary_directory is not None:
-            temporary_directory.cleanup()
-        fail(f"EXECUTION_ERROR: {error}", 2)
-
-    if temporary_directory is not None:
-        temporary_directory.cleanup()
-    if result.stdout:
-        print(result.stdout, end="")
-    if result.returncode != 0:
-        details = result.stderr.strip() or f"process exited with code {result.returncode}"
-        fail(f"EXECUTION_ERROR: {details}", 2)
-
-
-def validate_predictions(task_id: str, config: dict) -> pd.DataFrame:
-    id_column = config["id_column"]
-    target_column = config["target_column"]
-    feature_candidates = sorted(
-        (REPO_ROOT / "dataset" / task_id).glob("test_features.*")
-    )
-    if len(feature_candidates) != 1:
-        fail(
-            "CONFIG_ERROR: expected exactly one test_features file, found "
-            f"{len(feature_candidates)}"
-        )
-    features_path = feature_candidates[0]
-    predictions_path = REPO_ROOT / "outputs" / f"{task_id}_predictions.csv"
-
-    if not predictions_path.is_file():
-        fail(f"VALIDATION_ERROR: missing output file: {predictions_path}")
-
-    if features_path.suffix == ".csv":
-        expected_ids = pd.read_csv(features_path, usecols=[id_column])[id_column]
-    elif features_path.suffix == ".npz":
-        with np.load(features_path, allow_pickle=False) as features:
-            if id_column not in features.files:
-                fail(f"CONFIG_ERROR: {features_path} has no {id_column} array")
-            expected_ids = pd.Series(features[id_column])
-    elif features_path.suffix == ".txt":
-        with features_path.open(encoding="utf-8") as stream:
-            expected_ids = pd.Series(
-                line.split(maxsplit=1)[0] for line in stream if line.strip()
-            )
-    elif features_path.suffix in {".fasta", ".fa", ".faa"}:
-        with features_path.open(encoding="utf-8") as stream:
-            expected_ids = pd.Series(
-                line[1:].split(maxsplit=1)[0]
-                for line in stream
-                if line.startswith(">")
-            )
-    else:
-        fail(f"CONFIG_ERROR: unsupported test feature format: {features_path.suffix}")
-
-    predictions = pd.read_csv(predictions_path)
-    required = [id_column, target_column]
-    missing_columns = [column for column in required if column not in predictions.columns]
-    if missing_columns:
-        fail(f"VALIDATION_ERROR: missing required columns: {missing_columns}")
-    if len(predictions) != len(expected_ids):
-        fail(
-            "VALIDATION_ERROR: row count mismatch: "
-            f"expected {len(expected_ids)}, got {len(predictions)}"
-        )
-    if predictions[required].isna().any().any():
-        fail("VALIDATION_ERROR: predictions contain missing values")
-    if predictions[id_column].duplicated().any():
-        fail("VALIDATION_ERROR: prediction IDs must be unique")
-    expected_ids = set(expected_ids)
-    predicted_ids = set(predictions[id_column])
-    if predicted_ids != expected_ids:
-        fail("VALIDATION_ERROR: prediction IDs do not match test feature IDs")
-    return predictions[required]
-
-
-def grade(task_id: str, config: dict, predictions: pd.DataFrame) -> None:
-    id_column = config["id_column"]
-    target_column = config["target_column"]
-    labels_path = REPO_ROOT / "grading" / task_id / "test_labels.csv"
-    if not labels_path.is_file():
-        fail(f"GRADING_ERROR: missing held-out labels: {labels_path}")
-    labels = pd.read_csv(labels_path)
-
-    if labels[id_column].duplicated().any():
-        fail("GRADING_ERROR: label IDs must be unique")
-    evaluated = labels.merge(
-        predictions,
-        on=id_column,
-        how="left",
-        validate="one_to_one",
-        suffixes=("_true", "_pred"),
-    )
-    predicted_column = f"{target_column}_pred"
-    true_column = f"{target_column}_true"
-    if evaluated[predicted_column].isna().any():
-        count = int(evaluated[predicted_column].isna().sum())
-        fail(f"VALIDATION_ERROR: {count} held-out rows have no prediction")
-
-    metric = str(config.get("metric", "")).lower()
-    task_type = str(config.get("type", "")).lower()
-    true_values = evaluated[true_column]
-    predicted_values = evaluated[predicted_column]
-    if metric == "f1" and task_type == "classification":
-        average = config.get("average")
-        score = f1_score(true_values, predicted_values, average=average)
-        metric_label = f"F1 score ({average})"
-    elif metric == "ari" and task_type == "clustering":
-        score = adjusted_rand_score(true_values, predicted_values)
-        metric_label = "Adjusted Rand index"
-        nmi = normalized_mutual_info_score(true_values, predicted_values)
-        print(f"Normalized mutual information (visibility only): {nmi:.6f}")
-    elif metric == "nmi" and task_type == "clustering":
-        score = normalized_mutual_info_score(true_values, predicted_values)
-        metric_label = "Normalized mutual information"
-    else:
-        fail(f"CONFIG_ERROR: unsupported type/metric combination: {task_type}/{metric}")
-
-    threshold = float(config["threshold"])
-    print(f"{metric_label}: {score:.6f}")
-    print(f"Threshold: {threshold:.6f}")
-    if score < threshold:
-        fail(f"METRIC_FAILED: {score:.6f} < {threshold:.6f}")
-    print(f"METRIC_PASSED: {score:.6f} >= {threshold:.6f}")
-
+        install_requirements(task_id,int(config["install_timeout_seconds"]),skip_install)
+        with tempfile.TemporaryDirectory(prefix="biomed-grading-") as directory:
+            output=Path(directory)/f"{task_id}_predictions.csv"
+            report["execution"]={"passed":True,"duration_seconds":execute(solution,task_id,output,int(config["execution_timeout_seconds"]))}; report["score"]["earned"]=10; report["feedback"].append("Solution execution passed.")
+            predictions,validation=validate_predictions(task_id,config,output); report["validation"]=validation; report["score"]["earned"]=20; report["feedback"].append("Prediction format passed.")
+            if not sanity:
+                values=metrics(task_id,config,predictions); report["metrics"]=values
+                key=f"f1_{config.get('average')}" if config["metric"]=="f1" else config["metric"]
+                threshold=float(config["threshold"]); value=values[key]; report["thresholds"]={key:threshold}
+                # Three quality bands, worth 20/50/80 metric points.
+                earned=80 if value>=threshold else 50 if value>=threshold*.75 else 20 if value>=threshold*.5 else 0
+                report["score"]["earned"]+=earned
+                report["feedback"].append(f"{key}: {value:.4f}; target: {threshold:.4f}; quality points: {earned}/80.")
+        print(f"TASK_ID={task_id}\nSOLUTION={report['solution_path']}\nSCORE={report['score']['earned']}/100")
+        for item in report["feedback"]: print(f"- {item}")
+    except GradingError as e:
+        report["feedback"].append(str(e)); print(str(e),file=sys.stderr)
+    finally:
+        if report_path:
+            report_path.parent.mkdir(parents=True,exist_ok=True); report_path.write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
+    return 0 if report["execution"]["passed"] and report["validation"]["passed"] and (sanity or report["metrics"]) else 1
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--task", help="Task ID from task/<id>/config.yaml")
-    mode.add_argument("--detect-task", action="store_true")
-    parser.add_argument("--sanity-only", action="store_true")
-    args = parser.parse_args()
-
-    if args.detect_task:
-        print(detect_task())
-        return
-
-    config = load_config(args.task)
-    install_task_requirements(args.task, int(config["timeout_seconds"]))
-    execute_solution(find_solution(args.task), int(config["timeout_seconds"]))
-    predictions = validate_predictions(args.task, config)
-    if args.sanity_only:
-        print(f"SANITY_PASSED: validated {len(predictions)} predictions")
-        return
-    grade(args.task, config, predictions)
-
-
-if __name__ == "__main__":
-    main()
+    parser=argparse.ArgumentParser(description=__doc__); modes=parser.add_mutually_exclusive_group(required=True)
+    modes.add_argument("--task",choices=task_ids()); modes.add_argument("--detect-task",action="store_true")
+    parser.add_argument("--sanity-only",action="store_true"); parser.add_argument("--report-json",type=Path); parser.add_argument("--skip-install",action="store_true",help="Use already-installed dependencies")
+    args=parser.parse_args()
+    try:
+        if args.detect_task:
+            task,path=detect_task(); print(f"TASK_ID={task}\nSOLUTION_PATH={path.relative_to(REPO_ROOT)}"); return
+        raise SystemExit(assess(args.task,args.sanity_only,args.report_json,args.skip_install))
+    except GradingError as e: print(str(e),file=sys.stderr); raise SystemExit(1)
+if __name__=="__main__": main()

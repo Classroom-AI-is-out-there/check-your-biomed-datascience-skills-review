@@ -1,133 +1,178 @@
-## English / Русский
+# Biomedical data-science coding self-assessment
 
-### English
-This project supports both local execution from a cloned repository and direct loading of public data from the GitHub dataset mirror when the notebook is run in a hosted environment such as Colab.
+> **One template repository · one GitHub Classroom assignment · one invitation link · choose exactly one of seven tasks.**
 
-### Русский
-Этот проект поддерживает как локальный запуск из клонированного репозитория, так и прямую загрузку открытых данных из GitHub-репозитория с набором данных, когда ноутбук запускается в hosted-среде, например в Colab.
+## What this repository teaches
 
-# Задания для проверки навыков DataScience в домене BioMed
+This beginner-friendly course exercise teaches you to inspect biomedical data, write Python/Jupyter code, train classification or clustering models, produce a strict prediction table, validate it locally, submit with Git, and interpret automated model-quality feedback. It is a transparent, reproducible self-assessment—not a secure exam.
 
-Задания включают базовый набор компетенций по работе с задачами регрессии, классификации, кластеризации, обучения с учителем и без. Ключевой навык - это умение по заданном набору данных, используя теоретические знания, решить практическую задачу. **Важно**: не просто решите задание, а умейте аргументированно объяснить как и почему оно было решено именно Вашим способом (хотя, можно использовать и уже подготовленные примеры из папки vanilla-code, но с улучшением или доскональным пониманием как он работает).
+## Task catalog
 
-Задания включают тренировку на применение навыка работы с нейронными сетями в домене биомедицины, поэтому здесь здания посвящены обработки следующих модальностей:
-1) *таблица* - задание на исследование категориальных и числовых признаков (классификация с учителем, кластеризация без учителя)
-2) *временные ряды* - задание с ЭКГ и PPG (классификация с учителем, кластеризация без учителя, регрессия)
-3) *медицинские изображения* - задание с МРТ мозга (классификация с учителем, кластеризация без учителя)
-4) *генетика* - задание с анализом последовательностей нуклеотидов в популяциях (классификация с учителем, кластеризация без учителя)
+The values below come from each task's canonical `config.yaml`.
 
-## Описание репозитория
-**`\dataset`** - содержит данные для заданий
+| ID | Modality | Learning | Difficulty | Metric | Target | Output columns |
+|---|---|---|---|---|---:|---|
+| `task1` | clinical table | classification | beginner | weighted F1 | 0.75 | `patient_id,prediction` |
+| `task2_1` | ECG | classification | intermediate | macro F1 | 0.40 | `heartbeat_id,prediction` |
+| `task2_2` | PPG | clustering | intermediate | ARI | 0.05 | `window_id,prediction` |
+| `task3_1` | histopathology image | classification | intermediate | macro F1 | 0.35 | `image_id,prediction` |
+| `task3_2` | histopathology image | clustering | advanced | ARI | 0.12 | `image_id,prediction` |
+| `task4_1` | population genetics | classification | advanced | macro F1 | 0.10 | `sample_id,prediction` |
+| `task4_2` | protein sequence | clustering | advanced | ARI | 0.35 | `sequence_id,cluster` |
 
-**`\vanilla-code`** - тут примеры как можно решать задания 
+All public datasets and task descriptions remain in this repository. Follow the selected [`task/<task_id>/README.md`](task/) for its exact contract.
 
-**`\task`** - сами задания, которые содержат описание того, что надо сделать
+## Start here
 
-## Практические задания
+### 1. Accept and clone
 
-| Задание      | Тип                           | Данные                                | Метрики                       | Файл решения                |
-| ------------ | ----------------------------- | ------------------------------------- | ----------------------------- | --------------------------- |
-| **Task 1**   | Supervised (таблица)          | CSV: диспансеризация 1000 пациентов   | Accuracy, Recall, F1, ROC-AUC | `task1_solution.ipynb/py`   |
-| **Task 2.1** | Supervised (временные ряды)   | CSV: ECG5000, 5000 сегментов          | Accuracy, macro F1            | `task2_1_solution.ipynb/py` |
-| **Task 2.2** | Unsupervised (временные ряды) | NPZ: PPG 72 окна                      | ARI, NMI, Silhouette          | `task2_2_solution.ipynb/py` |
-| **Task 3.1** | Supervised (изображения)      | MedMNIST PathMNIST                    | Accuracy, macro F1            | `task3_1_solution.ipynb/py` |
-| **Task 3.2** | Unsupervised (изображения)    | MedMNIST PathMNIST                    | ARI, NMI, Silhouette          | `task3_2_solution.ipynb/py` |
-| **Task 4.1** | Supervised (генетика)         | TXT: ~1000 индивидов, 10101 признаков | Accuracy, macro F1            | `task4_1_solution.ipynb/py` |
-| **Task 4.2** | Unsupervised (генетика)       | FASTA: 24 белковые последовательности | ARI, NMI                      | `task4_2_solution.ipynb/py` |
+Open the single invitation link supplied by your instructor, accept the assignment, then copy the generated repository URL:
 
+```bash
+git clone <your-classroom-repository-url>
+cd check-your-biomed-datascience-skills-review
+```
 
-## Правила работы с этим репозиторием: 
+The instructor configures the assignment name, deadline, visibility, starter repository, Feedback Pull Request, and invitation link in Classroom. The tracked workflow is the only autograding definition; no duplicate Classroom-interface tests should be configured.
 
+### 2. Prerequisites and environment
 
-Получите от преподавателя ОДНО задание из папки `/task/` и выполните его.
+Install Git and Python 3.10+. Create an isolated environment (Windows activation: `.venv\Scripts\activate`):
 
-##№ Требования к сдаче
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-В github Classroom вы получаете форк задания. Решение задание и создайте файл в папке `your_solution/`:
-- `task1_solution.py` или `task1_solution.ipynb` — для Task 1
-- `task2_1_solution.py` или `task2_1_solution.ipynb` — для Task 2.1
-- и так далее...
+The grader installs the selected task requirements as needed. To work interactively, run `jupyter notebook` from the repository root.
 
-### Проверка
+### 3. Choose and initialize exactly one task
 
-При push автоматически проверяется:
-1. Файл решения существует
-2. Код запускается без синтаксических ошибок
-3. Основные импорты работают
+Read the catalog and selected task README, then copy its genuinely incomplete scaffold:
 
-Ручная проверка качества — после автотестов.
+```bash
+python tools/start_task.py task2_1
+```
 
-# Вот такие метрики используются для проверки
-F1, ARI и NMI — это стандартные метрики оценки, используемые для измерения производительности моделей машинного обучения. Их часто применяют в комплексе, так как каждая из них оценивает различные аспекты выходных данных модели.
+This creates only `your_solution/task2_1_solution.ipynb`. Edit that file only. You may instead submit a correctly named `.py` script. Do not copy multiple templates.
 
-## 1. F1-мера (метрика классификации)
-F1-мера измеряет, насколько точно модель предсказывает определенные целевые классы.
-* **Что измеряет:** Объединяет точность (насколько корректными были ваши положительные предсказания) и полноту (какую долю реальных положительных случаев вы успешно обнаружили) в единую оценку.
-* **Зачем используется:** Является гармоническим средним точности и полноты, что делает её крайне полезной при работе с несбалансированными наборами данных (например, при выявлении мошенничества или редких заболеваний), где стандартная «accuracy» (общая правильность) может вводить в заблуждение.
-* **Диапазон значений:** От 0 (худший результат) до 1 (идеальные точность и полнота).
+### 4. Build and run
 
-## 2. ARI (метрика кластеризации)
-Adjusted Rand Index (ARI, скорректированный индекс Рэнда) оценивает, насколько хорошо алгоритм без учителя группирует схожие объекты.
-* **Что измеряет:** Вычисляет сходство между кластерами, предсказанными моделью, и «истинными» (эталонными) группами. Индекс называется «скорректированным», поскольку учитывает вероятность случайного совпадения кластеров.
-* **Зачем используется:** Метрика устойчива к перестановкам меток и кластерам разного размера. Она показывает, является ли кластеризация действительно осмысленной или просто случайной.
-* **Диапазон значений:** Обычно от -1 до 1, где 1 означает полное совпадение с эталоном, 0 указывает на случайную разметку, а отрицательные значения свидетельствуют о плохой кластеризации.
+Load the documented training and test-feature paths, set a random seed, preprocess without test leakage, validate your approach, train, and predict every test row. Run a script from the root with `python your_solution/task2_1_solution.py`; run a notebook top-to-bottom with Jupyter. Your final cell writes via `get_output_path`.
 
-## 3. NMI (метрика кластеризации)
-Normalized Mutual Information (NMI, нормализованная взаимная информация) — это метрика, основанная на теории информации, используемая для оценки качества кластеризации или обнаружения сообществ.
-* **Что измеряет:** Количественно оценивает объем «информации» или зависимости, общей для предсказанных кластеров и фактических эталонных классов. Нормализация позволяет нивелировать влияние различного количества кластеров и объемов данных.
-* **Зачем используется:** Как и ARI, эта метрика не зависит от названий или номеров кластеров; важно лишь то, что объекты из одной реальной группы остаются вместе.
+A prediction CSV is a plain table connecting every test example's stable ID to your model's prediction. IDs let grading compare rows safely even when order changes. Exact universal rules: the two documented columns only; every test ID exactly once; no missing/extra/duplicate IDs; the expected row count; allowed class or valid cluster labels; no NaN/infinity; save with `index=False`. Task-specific examples and types are in each task README.
 
+### 5. Check locally
 
-# Как работает автотест здесь в Gitub (autograding github classroom)
-## Как работает автоматическая проверка (autograding) для Task 1
+```bash
+python grader/run_grading.py --task task2_1 --sanity-only
+python grader/run_grading.py --task task2_1
+python grader/run_grading.py --task task2_1 --report-json grading-report.json
+```
 
-Когда студент отправляет решение (`your-sollution/task1_solution.ipynb`), проверка проходит через пять этапов:
+Sanity mode installs/confirms dependencies, executes once, and validates output. Complete mode performs that same single execution, then calculates metrics and points. Set a seed (commonly 42), record important choices, and ensure a clean restart gives comparable results.
+
+## What do I submit?
+
+Submit **exactly one solution source file**:
 
 ```
+your_solution/<task_id>_solution.py
+```
+
+or:
+
+```
+your_solution/<task_id>_solution.ipynb
+```
+
+For Task 2.1, `your_solution/task2_1_solution.ipynb` is accepted. It must run from the repository root and generate the CSV described by that task. Do **not** commit generated predictions, reports, figures, executed notebooks, environments, or model checkpoints; `.gitignore` excludes them.
+
+```bash
+python grader/run_grading.py --task task2_1 --sanity-only
+git status
+git add your_solution/task2_1_solution.ipynb
+git commit -m "Complete Task 2.1"
 git push
-   │
-   ▼
-GitHub Actions запускает classroom.yml
-   │  (detect-task находит task1)
-   ▼
-Sanity check
-   │  (nbconvert выполняет ноутбук, проверяет outputs/task1_predictions.csv)
-   ▼
-F1 threshold check
-   │  (повторное выполнение, сравнение F1 с порогом 0.65)
-   ▼
-Classroom feedback
-      (баллы и статус проверки видны студенту)
 ```
 
-### 1. git push
+After pushing, open **Actions** or **Checks** and the optional Classroom Feedback PR.
 
-Студент редактирует `your-sollution/task1_solution.ipynb` и делает push в свой форк репозитория задания. Никакой отдельной логики Classroom здесь не происходит — это обычный git push.
+## What happens after `git push`?
 
-### 2. GitHub Actions запускает `classroom.yml`
-
-Push соответствует триггеру `on: [push, ...]`. Actions выполняет checkout репозитория, настраивает Python, устанавливает зависимости из `requirements.txt`. Затем job `detect-task` ищет файл по маске `your-sollution/task*_solution.*`, находит ровно одно совпадение и передаёт дальше по пайплайну значение `task=task1`.
-
-### 3. Sanity check
-
-Выполняется команда:
 ```
-python grader/run_grading.py --task task1 --sanity-only
+Accept the Classroom assignment
+              ↓
+       Clone repository
+              ↓
+       Choose one task
+              ↓
+      Initialize scaffold
+              ↓
+    Complete one solution
+              ↓
+   Run the solution locally
+              ↓
+   Generate prediction CSV
+              ↓
+    Run local sanity check
+              ↓
+   Commit the solution source
+              ↓
+          git push
+              ↓
+  GitHub Actions detects task
+              ↓
+  Solution executes exactly once
+              ↓
+   Output format is validated
+              ↓
+   Metric and score are calculated
+              ↓
+   Student reads the feedback
 ```
-Внутри скрипт запускает:
-```
-jupyter nbconvert --to notebook --execute your-sollution/task1_solution.ipynb
-```
-Ноутбук загружает `train.csv`/`test_features.csv` из уже склонированного репозитория, обучает SVM и сохраняет `outputs/task1_predictions.csv`. На этом этапе проверяется только: существует ли файл, есть ли в нём колонки `patient_id`/`prediction`, совпадает ли число строк (200) и нет ли пропущенных значений. Если что-то из этого не так, `autograding-command-grader` сразу выставляет 0/20 баллов с понятной причиной — ещё до расчёта F1.
 
-### 4. F1 threshold check
+Actions caches dependencies, detects the one filename, installs selected dependencies, gives the solution a fresh temporary `BIOMED_OUTPUT_PATH`, executes once, validates that exact artifact, scores it, writes a Markdown summary, and uploads JSON. A stale local output therefore cannot pass. Errors distinguish detection, installation, execution, format, and quality stages.
 
-Та же команда, но без флага `--sanity-only`. **Важно: ноутбук выполняется дважды за один push** — каждый grading-шаг вызывает скрипт заново и независимо. При тяжёлом ноутбуке (PCA + SVM + Fuzzy KNN + графики) это ощутимое время выполнения — закладывайте в `timeout:` как минимум вдвое больше, чем занимает одиночный прогон.
+## Metrics, points, and feedback
 
-На этом этапе скрипт загружает `grading/task1/test_labels.csv` — скрытые истинные метки (они доступны раннеру только потому, что лежат в приватном репозитории/секрете, а не в форке студента), объединяет с предсказаниями по `patient_id`, считает `f1_score(..., average='binary')` и завершается успешно, если результат ≥ 0.65.
+Execution is 10 points and valid output is 10. Quality earns 0 points below half the configured target, 20 at half, 50 at 75%, and 80 at the target. Classification uses configured F1 averaging. Clustering shows ARI and NMI even when ARI controls bands. Low quality invites iteration; malformed output is a separate issue. Find details in the Actions log, job summary, `grading-report` artifact, Classroom check, and Feedback PR.
 
-### 5. Classroom feedback
+## Troubleshooting (meaning → cause → inspect → rerun)
 
-`autograding-grading-reporter` считывает результаты обоих шагов (JSON с баллами и статусом pass/fail от `autograding-command-grader`), суммирует баллы (20 + 80 = 100) и публикует их как GitHub check runs. Если для задания включён Feedback PR, студент видит зелёные/красные отметки с названиями шагов ("sanity check", "F1 threshold") прямо в своём репозитории — эти же данные попадают в столбец с баллами на странице classroom.github.com.
+In every row, inspect your active `your_solution/<task_id>_solution.*` unless another file is named.
 
-> **Важно проверить перед реальным запуском**: запушить эталонное (заведомо рабочее) решение и убедиться, что все пять этапов проходят как ожидается, а Feedback PR (если включён) показывает оба чек-рана.
+| Problem | Meaning and likely cause | Inspect / corrective action | Rerun |
+|---|---|---|---|
+| No solution detected | No accepted active filename exists. | `your_solution/`; run `python tools/start_task.py <task_id>`. | `python grader/run_grading.py --detect-task` |
+| Multiple solutions | Two tasks or both extensions exist. | `your_solution/`; remove all but one. | detection command above |
+| Incorrect filename | Name is outside the configured convention. | Rename it to `<task_id>_solution.py` or `.ipynb`. | detection command |
+| Notebook not top-to-bottom | Hidden state or an earlier cell fails. | Restart kernel, Run All, fix first failing cell. | task sanity command |
+| Wrong working directory | Script relies on its file directory. | Use repository-relative documented paths and launch at root. | task sanity command |
+| Missing dependency | Import is not installed. | Add it to the selected task `requirements.txt` (or avoid it), then install that file. | `pip install -r task/<task_id>/requirements.txt` |
+| Missing CSV | Code never saved or stopped first. | Final save cell; use `get_output_path`. | task sanity command |
+| CSV in wrong directory | A path was hard-coded. | Replace it with `get_output_path("<task_id>")`. | task sanity command |
+| Wrong columns | Headers differ in spelling/case. | Task README contract; construct exact names. | task sanity command |
+| Extra Pandas index | `to_csv` wrote `Unnamed: 0`. | Use `to_csv(output_path, index=False)`. | task sanity command |
+| Wrong row count | Rows were dropped/duplicated. | Prediction construction; predict every test example. | task sanity command |
+| Missing IDs | ID extraction/alignment failed. | Test-feature loader and ID column. | task sanity command |
+| Duplicate IDs | Merge or batching repeated examples. | Check `submission[id].duplicated()`. | task sanity command |
+| IDs mismatch | IDs were renumbered or sourced from train. | Copy test IDs unchanged. | task sanity command |
+| NaN/infinite prediction | Preprocessing/model created non-finite output. | Check `np.isfinite` before saving. | task sanity command |
+| Invalid class label | Labels fall outside configured allowed values. | Task README/config and label encoding. | task sanity command |
+| One cluster | Clustering collapsed. | Features, scaling, hyperparameters, cluster count. | full task command |
+| Execution timeout | Code exceeded the configured limit. | Config timeout and slow model/loops; simplify or vectorize. | task sanity command |
+| Metric below target | Artifact is valid but quality is low. | Validation design/features/model; avoid grading labels. | full task command |
+| Workflow did not start | Push/Actions/default workflow issue. | Confirm commit is remote and Actions enabled; manually dispatch `classroom.yml`. | `git push` |
+
+Replace `<task_id>` with your choice, for example `task2_1`.
+
+## Transparency, reproducibility, and academic integrity
+
+Grader code and reference labels are visible deliberately: this teaches how validation and metrics work. For an honest, meaningful self-assessment, do not read or train against `grading/` labels while developing. Explain your method and seed, and commit code—not generated artifacts.
+
+## Краткая инструкция на русском
+
+Это один общий шаблон и одно задание GitHub Classroom: примите одну ссылку, клонируйте репозиторий, выберите **одно** из семи заданий, выполните `python tools/start_task.py task2_1`, редактируйте только созданный файл в `your_solution/`, запустите sanity/full-команды выше и отправьте только исходник через `git add`, `git commit`, `git push`. CSV должен содержать ровно указанные в README задания столбцы, каждый тестовый ID один раз и конечное предсказание; используйте `get_output_path` и `index=False`. После push смотрите Actions/Checks, JSON-артефакт и Feedback PR. Проверяющий код открыт; не используйте метки из `grading/` при разработке, если хотите честную самооценку.

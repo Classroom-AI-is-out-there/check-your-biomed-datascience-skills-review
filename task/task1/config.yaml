@@ -5,4 +5,10 @@ average: weighted
 id_column: patient_id
 target_column: prediction
 threshold: 0.75
-timeout_seconds: 300
+install_timeout_seconds: 600
+execution_timeout_seconds: 300
+train_data: dataset/task1/train.csv
+test_features: dataset/task1/test_features.csv
+allowed_labels:
+- 0
+- 1
